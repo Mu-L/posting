@@ -8,13 +8,12 @@ from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.design import ColorSystem
 from textual.message import Message
 from textual.reactive import reactive, Reactive
 from textual.widgets import TextArea, Label, Select, Checkbox
 from textual.widgets.text_area import Selection, TextAreaTheme
 from posting.config import SETTINGS
-from posting.themes import Theme
+from posting.themes import SyntaxTheme, Theme
 
 from posting.widgets.select import PostingSelect
 
@@ -209,18 +208,31 @@ class PostingTextArea(TextArea):
     def on_mount(self) -> None:
         self.indent_width = 2
         self.cursor_blink = SETTINGS.get().text_input.blinking_cursor
+
         self.register_theme(POSTING_THEME)
         self.register_theme(MONOKAI_THEME)
         self.register_theme(GITHUB_LIGHT_THEME)
         self.register_theme(DRACULA_THEME)
+
         empty = len(self.text) == 0
         self.set_class(empty, "empty")
+
         self.on_theme_change(self.app.themes[self.app.theme])
         self.app.theme_change_signal.subscribe(self, self.on_theme_change)
 
     def on_theme_change(self, theme: Theme) -> None:
-        self.theme = theme.syntax
-        self.refresh()
+        syntax_theme = theme.syntax
+        if isinstance(syntax_theme, str):
+            # A builtin theme was requested
+            self.theme = syntax_theme
+        else:  # isinstance(syntax_theme, SyntaxTheme)
+            # A custom theme has been specified.
+            # Register the theme and immediately apply it.
+            text_area_theme = theme.to_text_area_theme()
+            self.register_theme(text_area_theme)
+            self.theme = text_area_theme.name
+
+        self.call_after_refresh(self.refresh)
 
     @on(TextArea.Changed)
     def on_change(self, event: TextArea.Changed) -> None:
@@ -559,7 +571,7 @@ POSTING_THEME = TextAreaTheme(
 )
 MONOKAI = TextAreaTheme.get_builtin_theme("monokai")
 MONOKAI_THEME = TextAreaTheme(
-    name="posting-monokai",
+    name="monokai",
     syntax_styles={
         # "json.error": Style.parse("u #dc2626"),
         **(MONOKAI.syntax_styles if MONOKAI else {}),
@@ -569,7 +581,6 @@ MONOKAI_THEME = TextAreaTheme(
 GITHUB_LIGHT = TextAreaTheme.get_builtin_theme("github_light")
 GITHUB_LIGHT_THEME = TextAreaTheme(
     name="github_light",
-    base_style=None,
     syntax_styles={
         # "json.error": Style.parse("u #dc2626"),
         **(GITHUB_LIGHT.syntax_styles if GITHUB_LIGHT else {}),
@@ -578,7 +589,7 @@ GITHUB_LIGHT_THEME = TextAreaTheme(
 
 DRACULA = TextAreaTheme.get_builtin_theme("dracula")
 DRACULA_THEME = TextAreaTheme(
-    name="posting-dracula",
+    name="dracula",
     syntax_styles={
         # "json.error": Style.parse("u #dc2626"),
         **(DRACULA.syntax_styles if DRACULA else {}),

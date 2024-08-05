@@ -25,6 +25,10 @@ class ResponseArea(Vertical):
     The response area.
     """
 
+    COMPONENT_CLASSES = {
+        "border-title-status",
+    }
+
     DEFAULT_CSS = """\
     ResponseArea {
         border-subtitle-color: $text-muted;
@@ -36,13 +40,29 @@ class ResponseArea(Vertical):
                 display: none;
             }
         }
+        &.success .border-title-status {
+            color: $text;
+            background: $success;
+        }
+        &.warning .border-title-status {
+            color: $text;
+            background: $warning;
+        }
+        &.error .border-title-status {
+            color: $text;
+            background: $error;
+        }
+
+
     }
     """
     response: Reactive[httpx.Response | None] = reactive(None)
 
     def on_mount(self) -> None:
         self.border_title = "Response"
+        self._latest_response: httpx.Response | None = None
         self.add_class("section")
+        self.app.theme_change_signal.subscribe(self, self.on_theme_change)
 
     def compose(self) -> ComposeResult:
         with ResponseTabbedContent(disabled=self.response is None):
@@ -59,7 +79,12 @@ class ResponseArea(Vertical):
             with TabPane("Trace", id="response-trace-pane"):
                 yield ResponseTrace()
 
+    def on_theme_change(self, _) -> None:
+        if self._latest_response:
+            self.border_title = self._make_border_title(self._latest_response)
+
     def watch_response(self, response: httpx.Response | None) -> None:
+        self._latest_response = response
         if response is None:
             return
         else:
@@ -100,20 +125,23 @@ class ResponseArea(Vertical):
             [(name, value) for name, value in response.cookies.items()]
         )
 
+        self.remove_class("success", "warning", "error")
         if response.status_code < 300:
-            style = "#ecfccb on #4d7c0f"
+            self.add_class("success")
         elif response.status_code < 400:
-            style = "black on yellow"
+            self.add_class("warning")
         else:
-            style = "black on red"
+            self.add_class("error")
 
-        self.border_title = (
-            f"Response [{style}] {response.status_code} {response.reason_phrase} [/]"
-        )
+        self.border_title = self._make_border_title(response)
 
         settings = SETTINGS.get()
         if settings.response.show_size_and_time:
             self.border_subtitle = f"{human_readable_size(len(response.content))} in {response.elapsed.total_seconds() * 1000:.2f}[dim]ms[/]"
+
+    def _make_border_title(self, response: httpx.Response) -> str:
+        style = self.get_component_rich_style("border-title-status")
+        return f"Response [{style}] {response.status_code} {response.reason_phrase} [/]"
 
     @property
     def text_editor(self) -> TextEditor:
